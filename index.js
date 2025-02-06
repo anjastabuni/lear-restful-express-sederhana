@@ -8,6 +8,7 @@ const ErrorHandler = require("./ErrorHandler");
 
 // models
 const Product = require("./models/product");
+const { error } = require("console");
 
 // connect to mongodb
 mongoose
@@ -23,6 +24,12 @@ app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride("_method"));
+
+function wrapAsync(fn) {
+  return function (req, res, next) {
+    fn(req, res, next).catch((err) => next(err));
+  };
+}
 
 // roots
 app.get("/", (req, res) => {
@@ -41,59 +48,57 @@ app.get("/products", async (req, res) => {
 });
 
 app.get("/products/create", (req, res) => {
-  throw new ErrorHandler("This is a custom error", 503);
   res.render("products/create");
 });
 
-app.post("/products", async (req, res) => {
-  const product = new Product(req.body);
-  await product.save();
-  res.redirect(`/products/${product._id}`);
-});
+app.post(
+  "/products",
+  wrapAsync(async (req, res) => {
+    const product = new Product(req.body);
+    await product.save();
+    res.redirect(`/products/${product._id}`);
+  })
+);
 
-app.get("/products/:id", async (req, res, next) => {
-  try {
+app.get(
+  "/products/:id",
+  wrapAsync(async (req, res) => {
     const { id } = req.params;
     const product = await Product.findById(id);
     res.render("products/show", { product });
-  } catch (err) {
-    next(new ErrorHandler("Product tra ditemukan", 404));
-  }
-});
+  })
+);
 
-app.get("/products/:id/edit", async (req, res, next) => {
-  try {
+app.get(
+  "/products/:id/edit",
+  wrapAsync(async (req, res) => {
     const { id } = req.params;
     const product = await Product.findById(id);
     res.render("products/edit", { product });
-  } catch (err) {
-    next(new ErrorHandler("Product tidak ditemukan", 404));
-  }
-});
+  })
+);
 
-app.put("/products/:id", async (req, res, next) => {
-  try {
+app.put(
+  "/products/:id",
+  wrapAsync(async (req, res) => {
     const { id } = req.params;
     const product = await Product.findByIdAndUpdate(id, req.body, { runValidators: true });
     res.redirect(`/products/${product._id}`);
-  } catch (err) {
-    next(new ErrorHandler("Gagal menginput data", 412));
-  }
-});
+  })
+);
 
-app.delete("/products/:id", async (req, res, next) => {
-  try {
+app.delete(
+  "/products/:id",
+  wrapAsync(async (req, res) => {
     const { id } = req.params;
     await Product.findByIdAndDelete(id);
     res.redirect("/products");
-  } catch (err) {
-    next(new ErrorHandler("Gagal menghapus data", 500));
-  }
-});
+  })
+);
 
 app.use((err, req, res, next) => {
   const { status = 500, message = "Something went wrong" } = err;
-  res.status(status).send(message);
+  res.status(status).send(error);
 });
 
 app.listen(3000, () => {
