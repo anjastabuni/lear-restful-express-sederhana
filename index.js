@@ -22,14 +22,13 @@ mongoose
 
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride("_method"));
 
-function wrapAsync(fn) {
-  return function (req, res, next) {
-    fn(req, res, next).catch((err) => next(err));
-  };
-}
+const wrapAsync = (fn) => (req, res, next) => {
+  fn(req, res, next).catch(next);
+};
 
 // roots
 app.get("/", (req, res) => {
@@ -47,9 +46,12 @@ app.get("/products", async (req, res) => {
   }
 });
 
-app.get("/products/create", (req, res) => {
-  res.render("products/create");
-});
+app.get(
+  "/products/create",
+  wrapAsync((req, res) => {
+    res.render("products/create");
+  })
+);
 
 app.post(
   "/products",
@@ -96,10 +98,39 @@ app.delete(
   })
 );
 
+const validatorHandler = (err) => {
+  err.status = 400;
+  err.message = Object.values(err.errors)
+    .map((item) => item.message)
+    .join(", ");
+  return err;
+};
+
 app.use((err, req, res, next) => {
-  const { status = 500, message = "Something went wrong" } = err;
-  res.status(status).send(error);
+  console.error(err);
+
+  if (err.name === "ValidationError") err = validatorHandler(err);
+  if (err.name === "CastError") {
+    err.status = 404;
+    err.message = "Product not found";
+  }
+
+  res.status(err.status || 500).send(err.message || "Something went wrong");
 });
+
+// app.use((err, req, res, next) => {
+//   console.dir(err);
+//   if (err.name === "ValidationError") {
+//     err.status = 400;
+//     err.message = Object.values(err.errors).map((item) => item.message);
+//   }
+//   next(err);
+// });
+
+// app.use((err, req, res, next) => {
+//   const { status = 500, message = "Something went wrong" } = err;
+//   res.status(status).send(error);
+// });
 
 app.listen(3000, () => {
   console.log("shop app listening on http://127.0.0.1:3000");
